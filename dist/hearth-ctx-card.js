@@ -493,8 +493,8 @@ class HearthCtxCard extends HTMLElement {
       .say .q::before { content:'\\201C'; color:${A}; font-size:38px; font-weight:500; margin-right:2px; }
       .say .q::after { content:'\\201D'; color:${A}; font-size:38px; font-weight:500;
         margin-left:2px; line-height:0; vertical-align:-11px; }
-      .say .a { margin-top:12px; font-size:15px; letter-spacing:.08em;
-        color:rgba(255,255,255,.40); font-weight:400; text-transform:uppercase; }
+      .say .a { margin-top:12px; font-size:16px; letter-spacing:.02em;
+        color:rgba(255,255,255,.40); font-weight:400; font-style:italic; }
     `;
   }
 
@@ -541,7 +541,7 @@ class HearthCtxCard extends HTMLElement {
         body = `
           <div class="say">
             <div class="q">${this._esc(view.quote)}</div>
-            ${view.by ? `<div class="a">${this._esc(view.by)}</div>` : ""}
+            ${view.by ? `<div class="a">&mdash; ${this._esc(view.by)}</div>` : ""}
           </div>`;
         break;
     }
