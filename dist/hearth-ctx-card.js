@@ -233,11 +233,14 @@ class HearthCtxCard extends HTMLElement {
       const a = s.attributes;
       if (s.state === "IN") {
         cand.push({ rank: 0, order: -this._ago(s.last_changed), s, a });
-      } else if (
-        s.state === "POST" &&
-        this._ago(s.last_changed) < this._cfg.post_minutes * 60000
-      ) {
-        cand.push({ rank: 1, order: this._ago(s.last_changed), s, a });
+      } else if (s.state === "POST" && a.date) {
+        // anchor to kickoff so stale finals never resurface after an HA
+        // restart resets last_changed: game (~3.5h max) + post window
+        const sinceKick = Date.now() - new Date(a.date).getTime();
+        const windowMs = 210 * 60000 + this._cfg.post_minutes * 60000;
+        if (sinceKick > 0 && sinceKick < windowMs) {
+          cand.push({ rank: 1, order: sinceKick, s, a });
+        }
       } else if (s.state === "PRE" && a.date) {
         const toKick = new Date(a.date).getTime() - Date.now();
         if (toKick > 0 && toKick < this._cfg.pre_minutes * 60000) {
@@ -248,9 +251,11 @@ class HearthCtxCard extends HTMLElement {
     if (!cand.length) return null;
     cand.sort((x, y) => x.rank - y.rank || x.order - y.order);
     const { s, a } = cand[0];
-    const league =
-      (a.league_name || a.league || "") +
-      (a.season && isNaN(a.season) ? " · " + a.season.replace(/-/g, " ") : "");
+    const round =
+      a.season && isNaN(a.season) && !/final/i.test(a.season)
+        ? " · " + a.season.replace(/-/g, " ")
+        : "";
+    const league = (a.league_name || a.league || "") + round;
     const base = {
       kind: "sports",
       mode: s.state,
@@ -445,8 +450,9 @@ class HearthCtxCard extends HTMLElement {
       /* camera */
       .cam { position:absolute; inset:0; border-radius:18px; overflow:hidden;
         background:#101218; }
-      .cam ha-camera-stream, .cam video, .cam img.feed {
-        width:100%; height:100%; object-fit:cover; display:block; }
+      .cam ha-camera-stream, .cam img.feed {
+        position:absolute; top:50%; left:50%; width:100%; min-height:100%;
+        transform:translate(-50%,-50%); object-fit:cover; display:block; }
       .cam .overlay { position:absolute; left:0; right:0; bottom:0; z-index:2;
         padding:36px 22px 14px; display:flex; align-items:center; gap:12px;
         background:linear-gradient(transparent,rgba(6,7,10,.85)); }
@@ -603,18 +609,13 @@ class HearthCtxCard extends HTMLElement {
     const box = root.querySelector(".cam");
     const stateObj = this._hass.states[view.camera];
     if (!stateObj) return;
-    if (customElements.get("ha-camera-stream")) {
-      const el = document.createElement("ha-camera-stream");
-      el.hass = this._hass;
-      el.stateObj = stateObj;
-      el.muted = true;
-      box.prepend(el);
-    } else {
-      const img = document.createElement("img");
-      img.className = "feed";
-      img.src = `/api/camera_proxy_stream/${view.camera}?token=${stateObj.attributes.access_token}`;
-      box.prepend(img);
-    }
+    // MJPEG proxy stream on purpose: WebRTC/HLS video layers stall or
+    // mis-composite on this old Android WebView. MJPEG in an <img> is a
+    // true live feed and renders like any other image.
+    const img = document.createElement("img");
+    img.className = "feed";
+    img.src = `/api/camera_proxy_stream/${view.camera}?token=${stateObj.attributes.access_token}`;
+    box.prepend(img);
   }
 }
 
