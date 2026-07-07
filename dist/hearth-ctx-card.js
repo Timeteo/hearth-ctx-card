@@ -2,9 +2,9 @@
  * Contextual card for the Portal Hub ctx slot. Shows exactly one thing —
  * the most important thing — and renders nothing when there is nothing to say.
  *
- * Priority: weather alert > camera (person / doorbell) > vacuum stuck >
+ * Priority: camera (person / doorbell) > vacuum stuck >
  *           sports (live > recent final > imminent kickoff) > laundry >
- *           vacuum maintenance > daily saying.
+ *           vacuum maintenance > weather alert > daily saying.
  *
  * Vanilla JS, shadow DOM, zero dependencies. Live camera uses HA's own
  * <ha-camera-stream> element with an MJPEG proxy fallback, so it keeps
@@ -115,12 +115,12 @@ class HearthCtxCard extends HTMLElement {
 
   _pick() {
     return (
-      this._weatherView() ||
       this._cameraView() ||
       this._stuckView() ||
       this._sportsView() ||
       this._laundryView() ||
       this._maintenanceView() ||
+      this._weatherView() ||
       this._sayingView() ||
       null
     );
