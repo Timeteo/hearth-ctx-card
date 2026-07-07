@@ -143,7 +143,18 @@ class HearthCtxCard extends HTMLElement {
       severe,
       event: a.Event,
       sub: this._fmtUntil(a.Ends || a.Expires) || a.Severity + " alert",
+      md: this._alertMd(a),
     };
+  }
+
+  /* markdown body for the tap-for-details popup (script.show_on_portal) */
+  _alertMd(a) {
+    const parts = [];
+    if (a.Headline) parts.push("**" + a.Headline + "**");
+    if (a.Description) parts.push(a.Description);
+    if (a.Instruction) parts.push("### What to do\n\n" + a.Instruction);
+    if (a.AreasAffected) parts.push("*Areas: " + a.AreasAffected + "*");
+    return parts.join("\n\n");
   }
 
   /* 2 — cameras */
@@ -369,6 +380,7 @@ class HearthCtxCard extends HTMLElement {
         kind: "weather", sig: "d", severe: true,
         event: "Excessive Heat Warning",
         sub: "Until 8:00 PM tonight",
+        md: "**EXCESSIVE HEAT WARNING IN EFFECT UNTIL 8 PM PDT**\n\n* WHAT...Dangerously hot conditions 105 to 112.\n\n* WHEN...Until 8 PM PDT this evening.\n\n### What to do\n\nDrink plenty of fluids and stay out of the sun.\n\n*Areas: Inland Empire*",
       },
       camera: this._cfg.cameras.length
         ? {
@@ -515,7 +527,7 @@ class HearthCtxCard extends HTMLElement {
         body = `
           <div class="tag" style="color:${col}">&#9888; ${view.severe ? "Severe Weather" : "Weather Advisory"}</div>
           <h1>${this._esc(view.event)}</h1>
-          <div class="sub">${this._esc(view.sub)}</div>
+          <div class="sub">${this._esc(view.sub)}${view.md ? ' <span style="color:rgba(255,255,255,.25)">&middot; tap for details</span>' : ""}</div>
           <hr class="hairline">`;
         break;
       }
@@ -546,6 +558,16 @@ class HearthCtxCard extends HTMLElement {
         break;
     }
     root.innerHTML = `<style>${this._css()}</style><div class="wrap">${body}</div>`;
+    if (view.kind === "weather" && view.md) {
+      const wrap = root.querySelector(".wrap");
+      wrap.style.cursor = "pointer";
+      wrap.addEventListener("click", () =>
+        this._hass.callService("script", "show_on_portal", {
+          title: view.event,
+          text: view.md,
+        })
+      );
+    }
   }
 
   _teamCol(t) {
