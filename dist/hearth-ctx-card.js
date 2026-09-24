@@ -29,6 +29,7 @@ class HearthCtxCard extends HTMLElement {
         maintenance_hours: 2,    // consumable time-left threshold
         cameras: [],
         sports: [],
+        photos: null,            // {base, manifest?, interval?} idle photo rotation (replaces saying)
         demo: null,
       },
       config
@@ -51,6 +52,7 @@ class HearthCtxCard extends HTMLElement {
   }
   disconnectedCallback() {
     clearInterval(this._timer);
+    this._stopPhotos();
   }
   getCardSize() {
     return 4;
@@ -121,6 +123,7 @@ class HearthCtxCard extends HTMLElement {
       this._laundryView() ||
       this._maintenanceView() ||
       this._weatherView() ||
+      this._photoView() ||
       this._sayingView() ||
       null
     );
@@ -369,6 +372,112 @@ class HearthCtxCard extends HTMLElement {
     };
   }
 
+  /* 6b — idle photo rotation (hearth-frame manifest) */
+  _photoView() {
+    const p = this._cfg.photos;
+    if (!p || !p.base) return null;
+    this._loadPhotoManifest();
+    if (!this._photoList || !this._photoList.length) return null;
+    return { kind: "photo", sig: "p" };
+  }
+
+  _loadPhotoManifest() {
+    const now = Date.now();
+    if (this._photoFetchAt && now - this._photoFetchAt < 3600000) return;
+    this._photoFetchAt = now;
+    const p = this._cfg.photos;
+    const url = p.manifest || p.base.replace(/\/$/, "") + "/manifest.json";
+    fetch(url + "?t=" + now)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((m) => {
+        this._photoList = (m.photos || m).filter((x) => x && x.f);
+        this._photoDeck = [];
+        this._evaluate();
+      })
+      .catch(() => { this._photoFetchAt = now - 3300000; }); // retry in ~5 min
+  }
+
+  _nextPhoto() {
+    if (!this._photoDeck || !this._photoDeck.length) {
+      const a = this._photoList.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      this._photoDeck = a;
+    }
+    return this._photoDeck.pop();
+  }
+
+  // take the next portrait from the deck (for side-by-side pairing)
+  _takePortrait() {
+    const d = this._photoDeck || [];
+    for (let i = d.length - 1; i >= 0; i--)
+      if ((d[i].h || 0) > (d[i].w || 0)) return d.splice(i, 1)[0];
+    return null;
+  }
+
+  _stopPhotos() {
+    clearTimeout(this._photoTimer);
+    this._photoTimer = null;
+  }
+
+  _renderPhoto() {
+    const root = this.shadowRoot;
+    root.innerHTML = `<style>${this._css()}</style><div class="wrap"><div class="ph"></div></div>`;
+    const box = root.querySelector(".ph");
+    const base = this._cfg.photos.base.replace(/\/$/, "") + "/";
+    const secs = Math.max(10, this._cfg.photos.interval || 60);
+    const mode = this._cfg.photos.portrait || "pair";   // pair | skip | single
+    const isP = (x) => (x.h || 0) > (x.w || 0);
+    const fmt = (x) => {
+      const d = /^(\d{4})-(\d{2})/.exec((x && x.d) || "");
+      return d ? new Date(+d[1], +d[2] - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "";
+    };
+    const pick = () => {
+      for (let n = 0; n < 50; n++) {
+        const p = this._nextPhoto();
+        if (!p) return null;
+        if (!isP(p) || mode === "single") return [p];
+        if (mode === "skip") continue;
+        const q = this._takePortrait();
+        return q ? [p, q] : [p];
+      }
+      return null;
+    };
+    const show = () => {
+      const set = pick();
+      if (!set) return;
+      const imgs = set.map((p) => { const i = new Image(); i.src = base + p.f; return i; });
+      let pending = imgs.length, failed = false;
+      const done = () => {
+        if (--pending > 0) return;
+        if (failed || !box.isConnected) { if (!failed) return; clearTimeout(this._photoTimer); this._photoTimer = setTimeout(show, 2000); return; }
+        const layer = document.createElement("div");
+        layer.className = "layer" + (imgs.length > 1 ? " pair" : "");
+        imgs.forEach((img, k) => {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          if (imgs.length === 1 && isP(set[k])) img.className = "portrait";
+          const cap = document.createElement("div");
+          cap.className = "cap";
+          cap.textContent = fmt(set[k]);
+          cell.append(img, cap);
+          layer.append(cell);
+        });
+        box.append(layer);
+        requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add("on")));
+        // drop older layers after the crossfade so only the current set stays decoded
+        setTimeout(() => {
+          while (box.children.length > 1) { const o = box.firstChild; o.querySelectorAll("img").forEach((i) => (i.src = "")); o.remove(); }
+        }, 1600);
+      };
+      imgs.forEach((i) => { i.onload = done; i.onerror = () => { failed = true; done(); }; });
+      this._photoTimer = setTimeout(show, secs * 1000);
+    };
+    show();
+  }
+
   /* 7 — daily saying */
   _sayingView() {
     const raw = this._val(this._cfg.saying);
@@ -505,6 +614,19 @@ class HearthCtxCard extends HTMLElement {
       .bar i { display:block; height:2px; border-radius:1px;
         background:linear-gradient(90deg,${A},${A}80); }
 
+      /* idle photo */
+      .ph { position:absolute; inset:0; border-radius:18px; overflow:hidden; background:#0b0c10; }
+      .ph .layer { position:absolute; inset:0; opacity:0; transition:opacity 1.4s ease; }
+      .ph .layer.on { opacity:1; }
+      .ph .cell { position:absolute; inset:0; }
+      .ph .pair { display:flex; gap:6px; }
+      .ph .pair .cell { position:relative; flex:1; }
+      .ph img { width:100%; height:100%; object-fit:cover; object-position:center 35%; display:block; }
+      .ph img.portrait { object-fit:contain; }
+      .ph .cap { position:absolute; left:16px; bottom:12px; font-size:13px; font-weight:600;
+        letter-spacing:.18em; text-transform:uppercase; color:${A};
+        text-shadow:0 1px 6px rgba(0,0,0,.8); }
+
       /* saying */
       .say .q { font-size:29px; font-weight:300; line-height:1.35;
         color:rgba(255,255,255,.85); padding-right:40px; }
@@ -518,6 +640,11 @@ class HearthCtxCard extends HTMLElement {
 
   _render(view) {
     const root = this.shadowRoot;
+    this._stopPhotos();
+    if (view && view.kind === "photo") {
+      this._renderPhoto();
+      return;
+    }
     if (!view) {
       root.innerHTML = "";
       return;
