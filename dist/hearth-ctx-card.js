@@ -318,9 +318,15 @@ class HearthCtxCard extends HTMLElement {
         pct: this._laundryPct(machine, doneIso),
       };
     }
-    // finished linger: completion time in the recent past
+    // finished linger: only after a REAL end-of-cycle.
+    // The machine must have left "run" at or after its projected completion time.
+    // A stop BEFORE completion means cancelled / powered off, and completion_time
+    // is just a stale leftover — don't render "finished" for it.
     if (this._known(doneIso)) {
-      const since = Date.now() - new Date(doneIso).getTime();
+      const done = new Date(doneIso).getTime();
+      const stopped = new Date(machine.last_changed).getTime();
+      if (stopped + 120000 < done) return null;
+      const since = Date.now() - Math.max(done, stopped);
       if (since > 0 && since < this._cfg.laundry_linger * 60000) {
         return {
           kind: "laundry",
