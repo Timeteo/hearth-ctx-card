@@ -420,6 +420,7 @@ class HearthCtxCard extends HTMLElement {
   _stopPhotos() {
     clearTimeout(this._photoTimer);
     this._photoTimer = null;
+    this._photoGen = (this._photoGen || 0) + 1;   // orphans any running chain
   }
 
   _renderPhoto() {
@@ -445,14 +446,28 @@ class HearthCtxCard extends HTMLElement {
       }
       return null;
     };
+    const gen = this._photoGen;
+    const alive = () => gen === this._photoGen && box.isConnected;
+    const schedule = (ms) => {
+      clearTimeout(this._photoTimer);
+      this._photoTimer = setTimeout(() => { if (alive()) show(); }, ms);
+    };
+    let lastShown = 0;
     const show = () => {
+      if (!alive()) return;
+      // never swap sooner than the interval, whatever woke us
+      const wait = lastShown + secs * 1000 - Date.now();
+      if (lastShown && wait > 500) { schedule(wait); return; }
       const set = pick();
       if (!set) return;
       const imgs = set.map((p) => { const i = new Image(); i.src = base + p.f; return i; });
       let pending = imgs.length, failed = false;
       const done = () => {
         if (--pending > 0) return;
-        if (failed || !box.isConnected) { if (!failed) return; clearTimeout(this._photoTimer); this._photoTimer = setTimeout(show, 2000); return; }
+        if (!alive()) return;
+        if (failed) { schedule(2000); return; }
+        lastShown = Date.now();
+        schedule(secs * 1000);
         const layer = document.createElement("div");
         layer.className = "layer" + (imgs.length > 1 ? " pair" : "");
         imgs.forEach((img, k) => {
@@ -473,7 +488,7 @@ class HearthCtxCard extends HTMLElement {
         }, 1600);
       };
       imgs.forEach((i) => { i.onload = done; i.onerror = () => { failed = true; done(); }; });
-      this._photoTimer = setTimeout(show, secs * 1000);
+      schedule(secs * 1000 + 15000);   // safety net if a load never settles
     };
     show();
   }
