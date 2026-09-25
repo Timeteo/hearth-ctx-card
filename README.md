@@ -10,7 +10,8 @@ Priority stack (first match wins):
 4. **Sports** — [Team Tracker](https://github.com/vasqued2/ha-teamtracker) sensors: live game > recent final (default 60 min) > imminent kickoff (default 90 min)
 5. **Laundry** — SmartThings-style machine/job/completion sensors, with "finished" linger
 6. **Vacuum maintenance** — consumable end-of-life
-7. **Daily saying** — text helper, `quote|attribution` format
+7. **Idle photos** (optional) — rotates a [hearth-frame](https://github.com/Timeteo/hearth-frame) `manifest.json`; portrait photos paired side by side by default
+8. **Daily saying** — text helper, `quote|attribution` format (shown when `photos` is not set or its manifest can't load)
 
 Vanilla JS, shadow DOM, zero dependencies. Live camera uses HA's own `ha-camera-stream` (falls back to the MJPEG proxy), so it works without internet access.
 
@@ -49,6 +50,10 @@ laundry:
   name: Washer
 laundry_linger: 30    # min
 maintenance_hours: 2  # consumable time-left threshold
+photos:               # optional idle photo rotation (takes the saying's slot)
+  base: https://frame.example/frame   # dir holding manifest.json + photo paths; must be HTTPS if the dashboard is, with CORS for the dashboard origin
+  interval: 60        # seconds per photo (min 10)
+  portrait: pair      # pair | skip | single
 saying: input_text.portal_daily_saying
 demo: null            # weather|camera|camera2|stuck|sports|final|pre|laundry|maintenance|saying
 ```
