@@ -30,6 +30,7 @@ class HearthCtxCard extends HTMLElement {
         cameras: [],
         sports: [],
         photos: null,            // {base, manifest?, interval?} idle photo rotation (replaces saying)
+        alert_popup: "portal",   // portal = script.show_on_portal | local = popup on the tapped browser
         demo: null,
       },
       config
@@ -709,13 +710,39 @@ class HearthCtxCard extends HTMLElement {
     if (view.kind === "weather" && view.md) {
       const wrap = root.querySelector(".wrap");
       wrap.style.cursor = "pointer";
-      wrap.addEventListener("click", () =>
-        this._hass.callService("script", "show_on_portal", {
-          title: view.event,
-          text: view.md,
-        })
-      );
+      wrap.addEventListener("click", () => {
+        if (this._cfg.alert_popup === "local") this._localPopup(view.event, view.md);
+        else
+          this._hass.callService("script", "show_on_portal", {
+            title: view.event,
+            text: view.md,
+          });
+      });
     }
+  }
+
+  /* browser_mod popup on whichever browser was tapped (no registration needed) */
+  _localPopup(title, md) {
+    const A = this._cfg.accent;
+    this.dispatchEvent(new CustomEvent("ll-custom", {
+      bubbles: true, composed: true,
+      detail: { browser_mod: { service: "browser_mod.popup", data: {
+        title, size: "wide", dismissable: true,
+        style: `--popup-background-color:#101218; --popup-border-radius:28px;
+          --popup-padding-x:36px; --popup-padding-y:26px;
+          --primary-text-color:rgba(255,255,255,.97); --primary-color:${A};
+          --ha-dialog-surface-background:#101218; --md-dialog-container-color:#101218;
+          --mdc-theme-surface:#101218; --card-background-color:#101218;
+          --dialog-header-text-color:${A}; --mdc-dialog-heading-ink-color:${A};`,
+        content: {
+          type: "markdown", content: md,
+          card_mod: { style: {
+            ".": "ha-card { background:none; box-shadow:none; border:none; color:rgba(255,255,255,.85); font-size:19px; font-weight:300; line-height:1.55; }",
+            "ha-markdown$": `h1,h2,h3 { color:${A}; font-weight:400; } strong { color:rgba(255,255,255,.97); font-weight:500; }`,
+          } },
+        },
+      } } },
+    }));
   }
 
   _teamCol(t) {

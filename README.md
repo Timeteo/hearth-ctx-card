@@ -22,6 +22,7 @@ type: custom:hearth-ctx-card
 accent: '#FFB27A'
 alert_color: '#ff6b5e'
 weather_alerts: sensor.nws_alerts
+alert_popup: local          # optional: show alert details on this screen instead of the Portal
 cameras:              # in priority order
   - camera: camera.porch
     motion: binary_sensor.porch_person_occupancy
